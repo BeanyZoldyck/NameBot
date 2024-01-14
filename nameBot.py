@@ -17,11 +17,13 @@ def ohe(name):
             input(pair)
     return nameVec + [0]*(10-len(nameVec))
 
-def CE(Y,a):
-    return -Y*np.log(a)+(Y-1)*np.log(1-a)
+def CE(Y,Y_pred):
+    epsilon = 1e-9
+    return -Y*np.log(Y_pred + epsilon) + (1 - Y)*np.log(1 - Y_pred + epsilon)
 
-def dCE(Y,a):
-    return (-Y/a) + (1-Y)/(1-a)
+def dCE(Y,Y_pred):
+    epsilon = 1e-9
+    return (-Y/(Y_pred + epsilon)) + (1 - Y)/(1 - Y_pred + epsilon)
 
 def MSE(Y,a):
     return (Y-a)**2
@@ -68,9 +70,8 @@ class BCNN:
         self.B = []
         self.N = [[0] * dim for dim in topology]
         self.topology = topology # describes hidden layers
-        self.errors = [[0.0] * dim for dim in self.topology]
         self.output = 0
-        self.error = 0
+        
         He = lambda n: np.sqrt(2/n)
         for layer,dim in enumerate(topology):
             w1 = []
@@ -100,6 +101,10 @@ class BCNN:
                 w1.append(random.gauss(0,He(topology[-1])))
             self.W.append([w1])
             self.B.append(b1)
+        self.mw = [np.zeros_like(w) for w in self.W]
+        self.mb = [np.zeros_like(b) for b in self.B]
+        self.vw = [np.zeros_like(w) for w in self.W]
+        self.vb = [np.zeros_like(b) for b in self.B]
     def setZero(self):
         self.output = 0
         self.N = [[0] * dim for dim in self.topology]
@@ -176,7 +181,7 @@ class BCNN:
         #input('done')
         #self.forwardProp(X)
         #print(self.cost(Y, self.output)-C)
-    def backProp(self,Y,X,eta):
+    def backPropSGD(self,Y,X,eta):
         d0 = 0
         dW = [scaleMatrix(0,w) for w in self.W]
         dB = [[0 for _ in range(len(dmi))] for dmi in self.B]
@@ -213,7 +218,10 @@ class BCNN:
         
         for i,x in enumerate(self.W):
             self.W[i] = addMatrix(x, scaleMatrix(eta,dW[i]))
-
+    def backPropagation1(self, Y, X, eta, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8):
+        #TODO: Adam version of SGD
+        pass
+    
     def train(self, X, Y, lr, epochs, batchSize=1):        
         avgLoss = -1        
         possible = [[i,j] for j in range(2) for i in range(2)]
@@ -228,29 +236,15 @@ class BCNN:
             else:
                 for i in range(0,len(X),batchSize):
                     # Backward Propagation
-                    self.backProp(Y[i:i+batchSize],X[i:i+batchSize], lr)
+                    self.backPropSGD(Y[i:i+batchSize],X[i:i+batchSize], lr)
             # Print the loss for every 100 epochs
             if epoch % 100 == 0:
                 print(f'\nEpoch {epoch}, Average Loss: {round(avgLoss,10)}')
                 avgLoss = 0
             avgLoss += self.cost(Y[i],self.output)/100
-            print(''.join([f"{x} - {round(XOR.predict(x),8)}, {round(XOR.predict(x))}    " for x in possible]),end='\r')
+            print(round(avgLoss*(100/(1+epoch%100)),8),end='\r')
 
-XOR = BCNN([8],2)
-pre = XOR.predict([1,1])
-seen = 0
-print()
-FCN = lambda a,b: a^b
-Xs = [[random.randint(0,1),random.randint(0,1)] for _ in range(1000)]
-Ys = [FCN(x1,x0) for x0, x1 in Xs]
-try:
-    XOR.train(Xs,Ys,.05,301,10)
-except KeyboardInterrupt:
-    pass
-print('\n')
-possible = [[i,j] for j in range(2) for i in range(2)]
-print(''.join([f"{x}, {round(XOR.predict(x),8)}, {round(XOR.predict(x))}\n" for x in possible]))
-input()
+
 
 def oneHot(Y):
     oneHotY = np.zeros((Y.size,2))
@@ -264,12 +258,33 @@ with open("names_female.txt") as w:
 with open("names_male.txt") as m:
     maleNames = map(lambda x: x.replace('\n',''),m.readlines())
     m.close()
-
+##XOR = BCNN([8],2)
+##pre = XOR.predict([1,1])
+##seen = 0
+##print()
+##FCN = lambda a,b: a^b
+##Xs = [[random.randint(0,1),random.randint(0,1)] for _ in range(1000)]
+##Ys = [FCN(x1,x0) for x0, x1 in Xs]
+##try:
+##    XOR.train(Xs,Ys,.05,301,10)
+##except KeyboardInterrupt:
+##    pass
+##print('\n')
+##possible = [[i,j] for j in range(2) for i in range(2)]
+##print(''.join([f"{x}, {round(XOR.predict(x),8)}, {round(XOR.predict(x))}\n" for x in possible]))
+##input()
 #totalLen = lambda x, y: len(x)+len(y) if type(x)==str else x+len(y)
 #femLen = list(map(len,femaleNames))
 #mascLen = list(map(len,maleNames))
-X = [[0]+ohe(name) for name in femaleNames]+[[1]+ohe(name) for name in maleNames if len(name) < 11]
+Z = [[0]+ohe(name) for name in femaleNames]+[[1]+ohe(name) for name in maleNames if len(name) < 11]
+random.shuffle(Z)
+Y = [z[0] for z in Z]
+X = [z[1:] for z in Z]
+#input(len(X[0]))
 #print(ohe("Chuka"))
-input()
+NameBot = BCNN([16,8], 10)
+NameBot.train(X,Y,lr=.05,epochs=150,batchSize=50)
+print(NameBot.predict(ohe("Grace")))
+input(NameBot.predict(ohe("Josh")))
 #print(yTrain)
 #input(xTrain[:,0])
