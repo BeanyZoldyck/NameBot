@@ -231,12 +231,12 @@ class BCNN:
                     self.backProp(Y[i:i+batchSize],X[i:i+batchSize], lr)
             # Print the loss for every 100 epochs
             if epoch % 100 == 0:
-                print(f'Epoch {epoch}, Average Loss: {round(avgLoss,10)}')
+                print(f'\nEpoch {epoch}, Average Loss: {round(avgLoss,10)}')
                 avgLoss = 0
             avgLoss += self.cost(Y[i],self.output)/100
             print(''.join([f"{x} - {round(XOR.predict(x),8)}, {round(XOR.predict(x))}    " for x in possible]),end='\r')
 
-XOR = BCNN([24,12,6],2)
+XOR = BCNN([8],2)
 pre = XOR.predict([1,1])
 seen = 0
 print()
@@ -247,6 +247,7 @@ try:
     XOR.train(Xs,Ys,.05,301,10)
 except KeyboardInterrupt:
     pass
+print('\n')
 possible = [[i,j] for j in range(2) for i in range(2)]
 print(''.join([f"{x}, {round(XOR.predict(x),8)}, {round(XOR.predict(x))}\n" for x in possible]))
 input()
