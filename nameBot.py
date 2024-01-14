@@ -16,25 +16,51 @@ def ohe(name):
         except ValueError:
             input(pair)
     return nameVec + [0]*(10-len(nameVec))
+
 def CE(Y,a):
-    return Y*np.log(a)+(1-Y)*np.log(1-a)
+    return -Y*np.log(a)+(Y-1)*np.log(1-a)
+
 def dCE(Y,a):
-    return (Y/a) + (1-Y)/(1-a)
+    return (-Y/a) + (1-Y)/(1-a)
+
 def MSE(Y,a):
     return (Y-a)**2
+
 def dMSE(Y,a):
     return (a-Y)
+
 def ReLu(x):
     return np.maximum(0,x)
+
 def dReLu(x):
     return x>=0
+
 def sigmoid(x):
     return 1/(1+np.exp(-x))
+
 def dSigmoid(x):
     z = sigmoid(x)
     return z*(1-z)
+
 def invSigmoid(x):
     return np.log(x/(1-x))
+
+def addMatrix(matrix1, matrix2):
+    if len(matrix1) != len(matrix2) or len(matrix1[0]) != len(matrix2[0]):
+        raise ValueError("Matrices must have the same dimensions for addition")
+    result = [[0 for _ in range(len(matrix1[0]))] for _ in range(len(matrix1))]
+    for i in range(len(matrix1)):
+        for j in range(len(matrix1[0])):
+            result[i][j] = matrix1[i][j] + matrix2[i][j]
+    return result
+
+def scaleMatrix(factor, matrix):
+    result = [[0 for _ in range(len(matrix[0]))] for _ in range(len(matrix))]
+    for i in range(len(matrix)):
+        for j in range(len(matrix[0])):
+            result[i][j] = matrix[i][j] * factor
+    return result
+
 class BCNN:
     #asserting input of length 10
     def __init__(self, topology, inputDim):
@@ -77,6 +103,7 @@ class BCNN:
     def setZero(self):
         self.output = 0
         self.N = [[0] * dim for dim in self.topology]
+        
     def forwardProp(self,IL):
         self.setZero()
         #j is current layer, k is next layer
@@ -99,7 +126,6 @@ class BCNN:
         self.output+=self.B[-1][0]
         self.output = sigmoid(self.output)
         
-        #self.print()
     def predict(self, inp):
         self.forwardProp(inp)
         return self.output
@@ -138,9 +164,6 @@ class BCNN:
                 for k in range(shape[layer-1]):
                     dL[j] += d[-1][k]*self.W[-layer][k][j] * dReLu(self.N[-layer][j])
             d.append(dL)
-        #input(d[-1])
-        for layer, weightMatrix in enumerate(self.W[::-1],start=1):
-            pass#print(layer)
         #input()
         for layer, weightMatrix in enumerate(self.W[::-1],start=1):
             for tLi, wList in enumerate(weightMatrix):
@@ -155,111 +178,73 @@ class BCNN:
         #print(self.cost(Y, self.output)-C)
     def backProp(self,Y,X,eta):
         d0 = 0
-        C=0
+        dW = [scaleMatrix(0,w) for w in self.W]
+        dB = [[0 for _ in range(len(dmi))] for dmi in self.B]
+        shape = [1]+self.topology[::-1]
+        #C=0
         n = len(X)
         for i in range(n):
             self.forwardProp(X[i])
             d0 += self.dCost(Y[i],self.output)*self.output*(1-self.output)
-        d = [[d0/n]]
-        shape = [1]+self.topology[::-1]
-        #print(shape)
+            d = [[d0]]
+            #print(shape)
+            
+            for layer,dim in enumerate(shape[1:],start=1):
+                dL=[0]*dim
+                for j in range(dim):
+                    for k in range(shape[layer-1]):
+                        dL[j] += d[-1][k]*self.W[-layer][k][j] * dReLu(self.N[-layer][j])
+                d.append(dL)
         
-        for layer,dim in enumerate(shape[1:],start=1):
-            dL=[0]*dim
-            for j in range(dim):
-                for k in range(shape[layer-1]):
-                    dL[j] += d[-1][k]*self.W[-layer][k][j] * dReLu(self.N[-layer][j])
-            d.append(dL)
-        #input(d[-1])
-        for layer, weightMatrix in enumerate(self.W[::-1],start=1):
-            pass#print(layer)
-        #input()
-        for i in range(n):
             for layer, weightMatrix in enumerate(self.W[::-1],start=1):
                 for tLi, wList in enumerate(weightMatrix):
                     for pLi, _ in enumerate(wList):
-                        if layer < len(self.W): self.W[-layer][tLi][pLi] -= eta* d[layer-1][tLi] * ReLu(self.N[-(layer)][pLi])
-                        else: self.W[-layer][tLi][pLi] -= eta* d[layer-1][tLi]*X[i][pLi]
-                    self.B[-layer][tLi] -= eta*d[layer-1][tLi]
-        #self.printWeights()
-        #input('done')
-        for x in X:
-            self.forwardProp(x)
-            C += self.cost(Y[i],self.output)/n
-        print(C)
-        sleep(.01)
-    def dReLu(self, x):
-        # Derivative of ReLU activation function
-        return 1 if x > 0 else 0
-
-    def backwardProp(self, IL, Y, lr):
-        # Backward Propagation
-
-        # Calculate error in the output layer
-        self.error = self.cost(Y, self.output)
+                        if layer < len(self.W): dW[-layer][tLi][pLi] -= d[layer-1][tLi] * ReLu(self.N[-(layer)][pLi])/n
+                        else: dW[-layer][tLi][pLi] -= d[layer-1][tLi]*X[i][pLi]/n
+                    dB[-layer][tLi] -= d[layer-1][tLi]/n
         
-        # Calculate the gradient at the output layer
-        dOutput = self.dCost(Y, self.output) * dSigmoid(self.output)
+
+        for i,bL in enumerate(self.B):
+            for j,bias in enumerate(bL):
+                self.B[i][j] = bias + eta*dB[i][j]
+                
+        #print(len(self.W),len(self.W[0]))
+        #print(len(dW),len(self.B[0]))
         
-        # Update weights and biases in the output layer
-        for i in range(self.topology[-1]):
-            for j in range(len(self.N[-1])):
-                self.W[-1][0][i] -= lr * dOutput * self.N[-1][j]
-            self.B[-1][0] -= lr * dOutput
+        for i,x in enumerate(self.W):
+            self.W[i] = addMatrix(x, scaleMatrix(eta,dW[i]))
 
-        # Backpropagate the error through hidden layers
-        for layer in reversed(range(len(self.topology))):
-            for k in range(self.topology[layer]):
-                # Calculate the gradient at the hidden layer
-                if layer == len(self.topology) - 1:
-                    self.errors[layer][k] = dOutput * self.W[-1][0][k]
-                else:
-                    self.errors[layer][k] = self.errors[layer+1][0] * self.W[layer+1][0][k] * self.dReLu(self.N[layer][k])
-
-                # Update weights and biases in the hidden layer
-                for j in range(len(IL) if layer == 0 else self.topology[layer-1]):
-                    self.W[layer][k][j] -= lr * self.errors[layer][k] * (IL[j] if layer == 0 else self.N[layer-1][j])
-                self.B[layer][k] -= lr * self.errors[layer][k]
-
-    def train(self, X, Y, lr, epochs):        
-        avgLoss = -1
+    def train(self, X, Y, lr, epochs, batchSize=1):        
+        avgLoss = -1        
+        possible = [[i,j] for j in range(2) for i in range(2)]
         for epoch in range(epochs):
-            for i in range(len(X)):
-                # Forward Pass
-                self.forwardProp(X[i])
+            if batchSize==1:
+                for i in range(0,len(X)):
+                    # Forward Pass
+                    self.forwardProp(X[i])
 
-                # Backward Propagation
-                self.backPropagation(Y[i],X[i], lr)
-
+                    # Backward Propagation
+                    self.backPropagation(Y[i],X[i], lr)
+            else:
+                for i in range(0,len(X),batchSize):
+                    # Backward Propagation
+                    self.backProp(Y[i:i+batchSize],X[i:i+batchSize], lr)
             # Print the loss for every 100 epochs
             if epoch % 100 == 0:
                 print(f'Epoch {epoch}, Average Loss: {round(avgLoss,10)}')
                 avgLoss = 0
             avgLoss += self.cost(Y[i],self.output)/100
+            print(''.join([f"{x} - {round(XOR.predict(x),8)}, {round(XOR.predict(x))}    " for x in possible]),end='\r')
 
-# Example usage:
-# X_train, Y_train are your training data
-# inputDim is the dimension of your input
-# topology is a list describing hidden layers
-'''
-NameBot = BCNN([3,4],10)
-#print(NameBot.W)
-print('pred:',NameBot.predict(ohe("Chuka")))
-for i in range(10):    
-    NameBot.backpropagation(1,ohe("Chuka"),.1)
-print('pred:',NameBot.predict(ohe("Chuka")))
-
-'''
-XOR = BCNN([3,2],2)
+XOR = BCNN([24,12,6],2)
 pre = XOR.predict([1,1])
-batchSize = 30
 seen = 0
 print()
 FCN = lambda a,b: a^b
 Xs = [[random.randint(0,1),random.randint(0,1)] for _ in range(1000)]
 Ys = [FCN(x1,x0) for x0, x1 in Xs]
 try:
-    XOR.train(Xs,Ys,.07,201)
+    XOR.train(Xs,Ys,.05,301,10)
 except KeyboardInterrupt:
     pass
 possible = [[i,j] for j in range(2) for i in range(2)]
